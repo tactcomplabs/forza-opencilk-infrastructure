@@ -84,7 +84,10 @@ cmake \
   -DCMAKE_CXX_COMPILER="${CLANG_BIN_DIR}/clang++" \
   -DCMAKE_C_FLAGS="${TARGET} ${MARCH} ${MABI} --sysroot=${SYSROOT} --gcc-toolchain=${GCC_TOOLCHAIN}" \
   -DCMAKE_CXX_FLAGS="${TARGET} ${MARCH} ${MABI} --sysroot=${SYSROOT} --gcc-toolchain=${GCC_TOOLCHAIN}" \
-  -DCMAKE_ASM_COMPILER="${CLANG_BIN_DIR}/clang" \
+  -DCMAKE_SYSTEM_NAME="Generic" \
+  -DCMAKE_SYSTEM_PROCESSOR="riscv64" \
+  -DCMAKE_CROSSCOMPILING="True" \
+  -DCMAKE_OSX_ARCHITECTURES="" \
   "${OPENCILK_SOURCE}/llvm"
 
 # Build
