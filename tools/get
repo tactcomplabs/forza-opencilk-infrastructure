@@ -1,39 +1,37 @@
 #!/bin/sh
-
 usage() {
-    printf "USAGE:\n"
-    printf "%s [-t|--tag <tag>] source-dir\n" "$0"
-    printf "\tClone the OpenCilk source into the directory source-dir.\n"
-    printf "\tOptions:\n"
-    printf "\t\t-t|--tag <tag>\tClone the specified tag of OpenCilk.\n"
-    printf "\tEnvironment variables:\n"
-    printf "\t\tSet the environment variable CLONE_DEPTH to\n"
-    printf "\t\tlimit how deeply git clones the source repos.\n"
-    printf "\t\tThis defaults to 1.  Set to 0 for the full history.\n"
-    exit 1
+  printf "USAGE:\n"
+  printf "%s source-dir\n" "$0"
+  printf "\tClone the OpenCilk source into the directory source-dir.\n"
+  printf "\tEnvironment variables:\n"
+  printf "\t\tSet the environment variable CLONE_DEPTH to\n"
+  printf "\t\tlimit how deeply git clones the source repos.\n"
+  printf "\t\tThis defaults to 1.  Set to 0 for the full history.\n"
+  exit 1
 }
 
 # Source directory for OpenCilk (root of the opencilk-project repository tree).
 # Must be an absolute pathname.
-while [ $# -gt 0 ]
-do
-    case "$1" in
-	/*)
-	    OPENCILK_SOURCE="$1"
-	    shift;;
-	-h|-help|--help) usage;;
-	-t|--tag)
-	    TAG="$2"
-	    shift
-	    shift
-	    ;;
-	-*) echo "unknown option $1"; exit 1;;
-	*) echo "First argument ($1) must be absolute pathname"; exit 1;;
-    esac
+while [ $# -gt 0 ]; do
+  case "$1" in
+  /*)
+    OPENCILK_SOURCE="$1"
+    shift
+    ;;
+  -h | -help | --help) usage ;;
+  -*)
+    echo "unknown option $1"
+    exit 1
+    ;;
+  *)
+    echo "First argument ($1) must be absolute pathname"
+    exit 1
+    ;;
+  esac
 done
 
-if test -z "${OPENCILK_SOURCE}" ; then
-    usage
+if test -z "${OPENCILK_SOURCE}"; then
+  usage
 fi
 
 set -ex
@@ -44,26 +42,20 @@ CILKTOOLS_SOURCE="${OPENCILK_SOURCE:?}/cilktools"
 
 # Set the clone depth for the repos. This should be one for
 # non-developer usage and zero to clone the entire history.
-if [ -z "${CLONE_DEPTH}" ] ; then
-    DEPTH="--depth 1"
-elif [ "${CLONE_DEPTH}" -ne 0 ] ; then
-    DEPTH="--depth ${CLONE_DEPTH}"
-fi
-    
-# We shall clone the three OpenCilk source repositories using the same
-# tag as this infrastructure repository.
-if [ -z "${TAG}" ]; then
-    cd "$(dirname "$0" )"
-    TAG="$(git describe --tags --abbrev=0)"
-    cd -
+if [ -z "${CLONE_DEPTH}" ]; then
+  DEPTH="--depth 1"
+elif [ "${CLONE_DEPTH}" -ne 0 ]; then
+  DEPTH="--depth ${CLONE_DEPTH}"
 fi
 
-printf "Cloning OpenCilk tag ${TAG} into ${OPENCILK_SOURCE}."
+BRANCH="dev/18.x-FORZA"
+printf "Cloning FORZA OpenCilk with main repository on branch ${BRANCH} into ${OPENCILK_SOURCE}."
 
-# Clone the three OpenCilk source repositories.
-git clone -b "${TAG}" ${DEPTH} https://github.com/OpenCilk/opencilk-project "${OPENCILK_SOURCE}"
-git clone -b "${TAG}" ${DEPTH} https://github.com/OpenCilk/cheetah "${CHEETAH_SOURCE}"
-git clone -b "${TAG}" ${DEPTH} https://github.com/OpenCilk/productivity-tools "${CILKTOOLS_SOURCE}"
+# Clone the OpenCilk repositories - dev/18.x-FORZA repo for forza-opencilk-project, default for others
+git clone -b "${BRANCH}" ${DEPTH} https://github.com/tactcomplabs/forza-opencilk-project "${OPENCILK_SOURCE}"
+git clone ${DEPTH} https://github.com/tactcomplabs/forza-cheetah "${CHEETAH_SOURCE}"
+git clone ${DEPTH} https://github.com/OpenCilk/productivity-tools "${CILKTOOLS_SOURCE}"
 
 # Report that the clone succeeded.
-printf "Clone completed successfully.  Any messages above about 'detached HEAD' states are expected behavior.\n"
+
+printf "Clone completed successfully.  Any messages above about 'detached HEAD' states are expected behavior.\n"dG:
