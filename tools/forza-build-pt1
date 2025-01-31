@@ -1,0 +1,147 @@
+#!/bin/sh
+
+case "$1" in
+/*) OPENCILK_SOURCE="$1" ;;
+-h | -help | --help)
+  echo "USAGE: build source-dir build-dir [core-count]"
+  echo "  source-dir: Absolute path to OpenCilk source (opencilk-project repository root)"
+  echo "  build-dir:  Absolute path for build output"
+  echo "  core-count: Optional number of cores to use for parallel build"
+  exit 1
+  ;;
+-*)
+  echo "Error: Invalid option '$1'"
+  echo "Run with --help for usage information"
+  exit 1
+  ;;
+*)
+  echo "Error: Source directory must be an absolute path (starting with /)"
+  echo "Provided: $1"
+  echo "Run with --help for usage information"
+  exit 1
+  ;;
+esac
+
+case "$2" in
+/*) BUILD_DIR="$2" ;;
+*)
+  echo "Error: Build directory must be an absolute path (starting with /)"
+  echo "Provided: $2"
+  echo "Run with --help for usage information"
+  exit 1
+  ;;
+esac
+
+DEFAULT_NCPU=1
+NCPU="${3}"
+
+# Try to detect CPU count
+if test -z "${NCPU}" -a -r /proc/cpuinfo; then
+  NCPU=$(grep -c '^processor' /proc/cpuinfo 2>/dev/null)
+fi
+if test -z "${NCPU}"; then
+  if test -x /sbin/sysctl -o -x /usr/sbin/sysctl; then
+    NCPU=$(PATH=${PATH}:/sbin:/usr/sbin sysctl -n hw.ncpu)
+  fi
+fi
+if test -z "${NCPU}" -o 0 -eq "${NCPU}"; then
+  echo "Warning: Could not detect CPU count, defaulting to ${DEFAULT_NCPU} core"
+  NCPU=${DEFAULT_NCPU}
+fi
+
+# Validate directories
+if ! test -d "${OPENCILK_SOURCE}"; then
+  echo "Error: OpenCilk source directory not found"
+  echo "Path: ${OPENCILK_SOURCE}"
+  exit 1
+fi
+
+CHEETAH_SOURCE="${OPENCILK_SOURCE:?}/cheetah"
+CILKTOOLS_SOURCE="${OPENCILK_SOURCE:?}/cilktools"
+
+if ! test -d "${OPENCILK_SOURCE}/llvm"; then
+  echo "Error: LLVM source not found"
+  echo "Expected at: ${OPENCILK_SOURCE}/llvm"
+  echo "Please ensure you have the complete OpenCilk source tree"
+  exit 1
+fi
+
+if ! test -d "${CHEETAH_SOURCE}/runtime"; then
+  echo "Error: Cheetah runtime source not found"
+  echo "Expected at: ${CHEETAH_SOURCE}/runtime"
+  echo "Please ensure you have the complete OpenCilk source tree"
+  exit 1
+fi
+
+if ! test -d "${CILKTOOLS_SOURCE}"; then
+  echo "Error: OpenCilk tools source not found"
+  echo "Expected at: ${CILKTOOLS_SOURCE}"
+  echo "Please ensure you have the complete OpenCilk source tree"
+  exit 1
+fi
+
+exec </dev/null
+
+echo "Building with ${NCPU:?} parallel jobs"
+date # Timestamp
+
+OS="$(uname -s)"
+
+if ! test -d "${OPENCILK_SOURCE}/llvm"; then
+  echo "LLVM not found at ${OPENCILK_SOURCE}/llvm" 1>&2
+  exit 1
+fi
+if ! test -d "${CHEETAH_SOURCE}/runtime"; then
+  echo "Cheetah runtime source not found at ${CHEETAH_SOURCE}/runtime" 1>&2
+  exit 1
+fi
+if ! test -d "${CILKTOOLS_SOURCE}"; then
+  echo "OpenCilk productivity tools source not found at ${CILKTOOLS_SOURCE}" 1>&2
+  exit 1
+fi
+
+set -ex
+
+mkdir -p "${BUILD_DIR}"
+
+cd "${BUILD_DIR}"
+
+: "${OPENCILK_RELEASE:=Release}"
+: "${OPENCILK_ASSERTIONS:=On}"
+OPENCILK_COMPONENTS="clang"
+# Do NOT enable runtimes yet. We'll build them in a second stage.
+# OPENCILK_RUNTIMES="cheetah;cilktools"
+# COMPILER_RT_COMPONENTS=";compiler-rt"
+# COMPONENTS="${OPENCILK_COMPONENTS}${COMPILER_RT_COMPONENTS}"
+COMPONENTS="${OPENCILK_COMPONENTS}"
+
+# Enable the RISC-V target so the resulting compiler can produce RISC-V code.
+TARGETS="RISCV;Native"
+OPENCILK_INSTALL_PREFIX=$HOME/.local/opt/
+
+cmake -DLLVM_ENABLE_PROJECTS="${COMPONENTS}" \
+  -DLLVM_ENABLE_ASSERTIONS="${OPENCILK_ASSERTIONS}" \
+  -DLLVM_TARGETS_TO_BUILD="${TARGETS}" \
+  -DLLVM_DEFAULT_TARGET_TRIPLE="riscv64-unknown-elf" \
+  -DCMAKE_BUILD_TYPE="${OPENCILK_RELEASE}" \
+  -DCMAKE_INSTALL_PREFIX="${OPENCILK_INSTALL_PREFIX}" \
+  -DLLVM_OPTIMIZED_TABLEGEN=On \
+  "${OPENCILK_SOURCE}/llvm"
+
+cmake --build . -- -j "${NCPU}"
+
+case "${OS}" in
+Darwin)
+  TRIPLE=darwin
+  LIBNAME=libopencilk_osx.a
+  ;;
+*)
+  TRIPLE=$("${BUILD_DIR}/bin/clang" -print-target-triple)
+  LIBNAME=libopencilk.a
+  ;;
+esac
+
+VERSION=$(sed -n '/set.LLVM_VERSION_MAJOR/s/^.* \([0-9.]*\))/\1/p' "${OPENCILK_SOURCE}/llvm/CMakeLists.txt")
+LIBPATH="${BUILD_DIR}/lib/clang/${VERSION}/lib/${TRIPLE}/${LIBNAME:?}"
+
+date
